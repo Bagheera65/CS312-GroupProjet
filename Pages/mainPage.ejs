@@ -1,19 +1,23 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title><%= title %></title>
   <link rel="stylesheet" href="/CSS/style.css" />
-
+  <!-- Load Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
+  <!-- TOP ROW: PAYCHECK + PIE CHART -->
   <div class="top-row">
 
+    <!-- PAYCHECK SECTION -->
     <div class="container paycheck-container">
-      <h1>Expense Tracker</h1>
+      <h1>Welcome to <%= title %></h1>
 
+      <!-- Paycheck Input -->
       <label for="paycheck">Paycheck (monthly):</label>
       <input 
         type="number" 
@@ -22,6 +26,7 @@
         class="input-field"
       />
 
+      <!-- Pay Left Display -->
       <label for="payleft">Pay Left:</label>
       <input 
         type="text" 
@@ -34,6 +39,7 @@
       <button id="submit-btn">Submit</button>
     </div>
 
+    <!-- PIE CHART -->
     <div class="chart-container">
       <h3>Expense Breakdown</h3>
       <canvas id="expenseChart"></canvas>
@@ -41,12 +47,12 @@
 
   </div>
 
-  <!-- === Budgeting Section === -->
+  <!-- BUDGETING TOOL -->
   <h2 class="section-title">Budgeting Tool</h2>
 
   <div class="budget-layout">
 
-    <!-- LEFT SIDE: CREATE NEW EXPENSE -->
+    <!-- CREATE NEW EXPENSE -->
     <div class="create-expense">
       <h3>Create New Expense</h3>
 
@@ -63,7 +69,7 @@
         <span>Fixed</span>
       </div>
 
-
+      <!-- Cost field for FIXED expenses -->
       <div id="fixed-cost-container" style="display:none;">
         <label>Cost:</label>
         <input type="number" id="fixed-cost" class="input-field" placeholder="e.g. 1200">
@@ -84,7 +90,7 @@
       <button id="add-expense-btn">Submit Expense</button>
     </div>
 
-
+    <!-- COLUMNS -->
     <div class="expense-columns">
 
       <div class="column">
@@ -115,19 +121,20 @@
     </div>
   </div>
 
-
-
+  <!-- JAVASCRIPT -->
   <script>
 
-
+    /* ============================================================
+       TOGGLE FIXED/VVARIABLE COST FIELD
+    ============================================================ */
     document.getElementById("expense-fixed").addEventListener("change", function () {
       document.getElementById("fixed-cost-container").style.display =
         this.checked ? "block" : "none";
     });
 
-
-    document.getElementById("submit-btn").addEventListener("click", updateAll);
-
+    /* ============================================================
+       PAY LEFT CALCULATION
+    ============================================================ */
     function updatePayLeft() {
       const paycheck = Number(document.getElementById("paycheck").value || 0);
       let totalExpenses = 0;
@@ -144,7 +151,17 @@
       document.getElementById("payleft").value = "$" + payLeft.toFixed(2);
     }
 
+    document.getElementById("submit-btn").addEventListener("click", () => {
+  const paycheck = document.getElementById("paycheck").value;
+  localStorage.setItem("paycheck", paycheck);
+  updateAll();
+});
 
+
+
+    /* ============================================================
+       PIE CHART
+    ============================================================ */
 
     let expenseChart = null;
 
@@ -183,13 +200,10 @@
 
       for (let [cat, amount] of Object.entries(totals)) {
         if (amount > 0) {
-          labels.push(
-            cat.charAt(0).toUpperCase() + cat.slice(1)
-          );
+          labels.push(cat.charAt(0).toUpperCase() + cat.slice(1));
           data.push(amount);
         }
       }
-
 
       if (expenseChart) {
         expenseChart.destroy();
@@ -209,8 +223,41 @@
     }
 
 
+    document.addEventListener("DOMContentLoaded", () => {
+  // Load paycheck from localStorage
+  const savedPaycheck = localStorage.getItem("paycheck");
+  if (savedPaycheck !== null) {
+    document.getElementById("paycheck").value = savedPaycheck;
+  }
 
-    document.getElementById("add-expense-btn").addEventListener("click", () => {
+  loadExpenses();
+});
+
+
+    async function loadExpenses() {
+      const response = await fetch('/api/expenses');
+      const expenses = await response.json();
+
+      expenses.forEach(exp => {
+        const card = createExpenseCard(
+          exp.name,
+          exp.is_fixed,
+          exp.cost,
+          exp.description,
+          exp.category
+        );
+
+        card.dataset.id = exp.id;
+        document.getElementById("col-" + exp.category).appendChild(card);
+      });
+
+      updateAll();
+    }
+
+    /* ============================================================
+       ADD EXPENSE TO DATABASE
+    ============================================================ */
+    document.getElementById("add-expense-btn").addEventListener("click", async () => {
       const name = document.getElementById("expense-name").value;
       const fixed = document.getElementById("expense-fixed").checked;
       const category = document.getElementById("expense-category").value;
@@ -222,14 +269,39 @@
         return;
       }
 
-      const card = createExpenseCard(name, fixed, fixedCost, desc, category);
+      const response = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          category,
+          is_fixed: fixed,
+          cost: fixed ? fixedCost : null,
+          description: desc
+        })
+      });
+
+      const savedExpense = await response.json();
+
+      const card = createExpenseCard(
+        savedExpense.name,
+        savedExpense.is_fixed,
+        savedExpense.cost,
+        savedExpense.description,
+        savedExpense.category
+      );
+
+      card.dataset.id = savedExpense.id;
+
       document.getElementById("col-" + category).appendChild(card);
 
       resetExpenseForm();
       updateAll();
     });
 
-
+    /* ============================================================
+       CREATE CARD
+    ============================================================ */
     function createExpenseCard(name, fixed, fixedCost, desc, category) {
       const card = document.createElement("div");
       card.classList.add("expense-card");
@@ -265,23 +337,32 @@
       return card;
     }
 
-
-
+    /* ============================================================
+       CARD EVENTS (EDIT / DELETE)
+    ============================================================ */
     function attachCardEvents(card) {
 
-      card.querySelector(".delete-btn").addEventListener("click", () => {
+      // DELETE CARD + DATABASE ENTRY
+      card.querySelector(".delete-btn").addEventListener("click", async () => {
         if (!confirm("Are you sure you want to delete this expense?")) return;
+
+        const id = card.dataset.id;
+
+        await fetch(`/api/expenses/${id}`, {
+          method: 'DELETE'
+        });
 
         card.remove();
         updateAll();
       });
 
-      card.querySelector(".edit-btn").addEventListener("click", () => {
-
+      // EDIT CARD + DATABASE
+      card.querySelector(".edit-btn").addEventListener("click", async () => {
         const name = card.querySelector("strong").textContent;
         const isFixed = card.dataset.fixed === "true";
         const category = card.dataset.category;
         const desc = card.querySelector(".desc")?.textContent || "";
+        const id = card.dataset.id;
 
         document.getElementById("expense-name").value = name;
         document.getElementById("expense-fixed").checked = isFixed;
@@ -289,7 +370,9 @@
         document.getElementById("expense-desc").value = desc;
 
         if (isFixed) {
-          const cost = card.querySelector(".fixed-expense-cost").textContent.replace("$", "");
+          const cost = card
+            .querySelector(".fixed-expense-cost")
+            .textContent.replace("$", "");
           document.getElementById("fixed-cost-container").style.display = "block";
           document.getElementById("fixed-cost").value = cost;
         } else {
@@ -297,15 +380,18 @@
           document.getElementById("fixed-cost").value = "";
         }
 
+        await fetch(`/api/expenses/${id}`, {
+          method: "DELETE"
+        });
+
         card.remove();
         updateAll();
       });
     }
 
-
-    /* ----------------------------------
-       RESET EXPENSE FORM
-    ---------------------------------- */
+    /* ============================================================
+       RESET FORM
+    ============================================================ */
     function resetExpenseForm() {
       document.getElementById("expense-name").value = "";
       document.getElementById("expense-fixed").checked = false;
@@ -315,10 +401,9 @@
       document.getElementById("expense-desc").value = "";
     }
 
-
-    /* ----------------------------------
-       UPDATE EVERYTHING (called often)
-    ---------------------------------- */
+    /* ============================================================
+       UPDATE EVERYTHING
+    ============================================================ */
     function updateAll() {
       updatePayLeft();
       updatePieChart();
@@ -328,4 +413,3 @@
 
 </body>
 </html>
-
