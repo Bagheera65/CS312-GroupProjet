@@ -1,4 +1,4 @@
-// index.js — Full Express + PostgreSQL backend
+
 
 import express from 'express';
 import session from 'express-session';
@@ -7,9 +7,7 @@ import { fileURLToPath } from 'url';
 import pkg from 'pg';
 const { Pool } = pkg;
 
-// ------------------------------------
-// PostgreSQL Connection
-// ------------------------------------
+
 const pool = new Pool({
   user: 'postgres',      
   host: 'localhost',
@@ -18,20 +16,18 @@ const pool = new Pool({
   port: 5432
 });
 
-// ES Module dirname fix
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ------------------------------------
-// Middleware
-// ------------------------------------
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Sessions (future use)
+
 app.use(
   session({
     secret: 'super-secret-key',
@@ -41,32 +37,19 @@ app.use(
   })
 );
 
-// ------------------------------------
-// Static Files
-// ------------------------------------
+
 app.use('/CSS', express.static(path.join(__dirname, 'CSS')));
 app.use('/Pages', express.static(path.join(__dirname, 'Pages')));
 
-// ------------------------------------
-// EJS Setup
-// ------------------------------------
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'Pages'));
 
-// ------------------------------------
-// Routes
-// ------------------------------------
-
-// Homepage
 app.get('/', (req, res) => {
   res.render('mainPage', { title: 'MainPage' });
 });
 
-// ------------------------------------
-// API ENDPOINTS
-// ------------------------------------
 
-// Load all expenses
 app.get('/api/expenses', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM expenses ORDER BY id ASC');
@@ -77,7 +60,7 @@ app.get('/api/expenses', async (req, res) => {
   }
 });
 
-// Add new expense
+
 app.post('/api/expenses', async (req, res) => {
   try {
     const { name, category, is_fixed, cost, description } = req.body;
@@ -96,7 +79,7 @@ app.post('/api/expenses', async (req, res) => {
   }
 });
 
-// Delete expense
+
 app.delete('/api/expenses/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM expenses WHERE id=$1', [req.params.id]);
@@ -107,7 +90,7 @@ app.delete('/api/expenses/:id', async (req, res) => {
   }
 });
 
-// Edit expense
+
 app.put('/api/expenses/:id', async (req, res) => {
   try {
     const { name, category, is_fixed, cost, description } = req.body;
@@ -127,16 +110,12 @@ app.put('/api/expenses/:id', async (req, res) => {
   }
 });
 
-// ------------------------------------
-// 404 Handler
-// ------------------------------------
+
 app.use((req, res) => {
   res.status(404).send('404 — Page Not Found');
 });
 
-// ------------------------------------
-// Start Server
-// ------------------------------------
+
 app.listen(PORT, () => {
   console.log(`Server running at ${PORT}`);
 });
